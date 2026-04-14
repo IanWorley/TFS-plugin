@@ -1,0 +1,61 @@
+<idea-plugin>
+    <id>com.ianworley.tfvc</id>
+    <name>TFVC for JetBrains</name>
+    <vendor email="noreply@example.com">Ian Worley</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <resource-bundle>messages.TfvcBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="TFVC"
+                           displayType="BALLOON"
+                           key="notification.group.tfvc"/>
+
+        <projectService serviceImplementation="com.ianworley.tfvc.settings.TfvcSettingsState"/>
+        <projectService serviceImplementation="com.ianworley.tfvc.tf.TfCommandRunner"/>
+        <projectService serviceImplementation="com.ianworley.tfvc.tf.TfvcWorkspaceService"/>
+        <projectService serviceImplementation="com.ianworley.tfvc.vcs.TfvcStatusCache"/>
+        <postStartupActivity implementation="com.ianworley.tfvc.vcs.TfvcStartupActivity"/>
+
+        <vcs name="TFVC" vcsClass="com.ianworley.tfvc.vcs.TfvcVcs"/>
+        <vcsRootChecker implementation="com.ianworley.tfvc.vcs.TfvcVcsRootChecker"/>
+
+        <projectConfigurable parentId="project.propVcs"
+                             instance="com.ianworley.tfvc.settings.TfvcSettingsConfigurable"/>
+    </extensions>
+
+    <actions>
+        <action id="com.ianworley.tfvc.actions.TfvcAddAction"
+                class="com.ianworley.tfvc.actions.TfvcAddAction"
+                text="TFVC Add"
+                description="Add selected files to TFVC">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.ianworley.tfvc.actions.TfvcCheckoutAction"
+                class="com.ianworley.tfvc.actions.TfvcCheckoutAction"
+                text="TFVC Checkout"
+                description="Check out selected files from TFVC">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="com.ianworley.tfvc.actions.TfvcShelveAction"
+                class="com.ianworley.tfvc.actions.TfvcShelveAction"
+                text="TFVC Shelve"
+                description="Create a TFVC shelveset">
+            <add-to-group group-id="VcsGroup" anchor="last"/>
+        </action>
+
+        <action id="com.ianworley.tfvc.actions.TfvcUnshelveAction"
+                class="com.ianworley.tfvc.actions.TfvcUnshelveAction"
+                text="TFVC Unshelve"
+                description="Unshelve a TFVC shelveset">
+            <add-to-group group-id="VcsGroup" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

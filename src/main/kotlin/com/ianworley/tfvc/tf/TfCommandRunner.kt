@@ -7,7 +7,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import kotlin.system.measureTimeMillis
 
 class TfCommandRunner(
     private val project: Project,
@@ -35,19 +34,19 @@ class TfCommandRunner(
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
 
         if (workingDirectory != null) {
-            commandLine.withWorkDirectory(workingDirectory)
+            commandLine.withWorkDirectory(workingDirectory.toFile())
         }
 
         val handler = CapturingProcessHandler(commandLine)
         val timeoutMillis = timeoutSeconds * 1000
+        val startedAt = System.nanoTime()
         var capturedOutput = handler.runProcess(timeoutMillis)
-        val durationMs = measureTimeMillis {
-            if (capturedOutput.isTimeout) {
-                capturedOutput = capturedOutput.apply {
-                    appendStderr("Command timed out after ${timeoutSeconds}s.")
-                }
+        if (capturedOutput.isTimeout) {
+            capturedOutput = capturedOutput.apply {
+                appendStderr("Command timed out after ${timeoutSeconds}s.")
             }
         }
+        val durationMs = (System.nanoTime() - startedAt) / 1_000_000
 
         val result = TfCommandResult(
             exitCode = if (capturedOutput.isTimeout) 100 else capturedOutput.exitCode,

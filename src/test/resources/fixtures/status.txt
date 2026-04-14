@@ -1,0 +1,17 @@
+Server item: $/Sample/file.txt
+Local item: C:\src\sample\file.txt
+Change: edit
+User: ian
+Lock: none
+
+Server item: $/Sample/newfile.txt
+Local item: C:\src\sample\newfile.txt
+Change: add, candidate
+User: ian
+Lock: none
+
+Server item: $/Sample/renamed.txt
+Local item: C:\src\sample\renamed.txt
+Change: rename
+User: ian
+Lock: checkout

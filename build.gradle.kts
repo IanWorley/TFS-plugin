@@ -23,7 +23,8 @@ dependencies {
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
 
-    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit"))
+    testImplementation("junit:junit:4.13.2")
     testImplementation("org.assertj:assertj-core:3.27.3")
 }
 
@@ -77,6 +78,6 @@ tasks {
     }
 
     test {
-        useJUnitPlatform()
+        useJUnit()
     }
 }

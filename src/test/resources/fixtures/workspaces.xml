@@ -1,0 +1,6 @@
+<Workspaces>
+  <Workspace name="WorkspaceOne" owner="ian" computer="DEVBOX" location="Local">
+    <Collection>http://tfs:8080/tfs/DefaultCollection</Collection>
+    <WorkingFolder localItem="C:\src\sample" serverItem="$/Sample" />
+  </Workspace>
+</Workspaces>

@@ -7,7 +7,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vcs.ProjectLevelVcsManager
-import com.intellij.openapi.vcs.VcsException
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangeListManagerGate
 import com.intellij.openapi.vcs.changes.ChangelistBuilder
@@ -15,7 +14,6 @@ import com.intellij.openapi.vcs.changes.ChangeProvider
 import com.intellij.openapi.vcs.changes.ContentRevision
 import com.intellij.openapi.vcs.changes.CurrentContentRevision
 import com.intellij.openapi.vcs.changes.VcsDirtyScope
-import com.intellij.openapi.vcs.changes.committed.MockAbstractVcs
 import com.intellij.vcsUtil.VcsUtil
 
 class TfvcChangeProvider(
@@ -34,7 +32,7 @@ class TfvcChangeProvider(
         val statusCache = TfvcStatusCache.getInstance(project)
         roots.forEach { root ->
             statusCache.statusForRoot(root).forEach { pending ->
-                val filePath = VcsUtil.getFilePath(pending.localPath)
+                val filePath: FilePath = VcsUtil.getFilePath(pending.localPath.toFile())
                 if (pending.isCandidate) {
                     builder.processUnversionedFile(filePath)
                 } else {

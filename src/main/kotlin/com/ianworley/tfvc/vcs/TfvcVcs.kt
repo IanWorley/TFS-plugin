@@ -18,6 +18,10 @@ class TfvcVcs(project: Project) : AbstractVcs(project, NAME) {
 
     companion object {
         const val NAME = "TFVC"
-        val KEY: VcsKey = VcsKey.create(NAME)
+        val KEY: VcsKey by lazy {
+            val constructor = VcsKey::class.java.getDeclaredConstructor(String::class.java)
+            constructor.isAccessible = true
+            constructor.newInstance(NAME)
+        }
     }
 }

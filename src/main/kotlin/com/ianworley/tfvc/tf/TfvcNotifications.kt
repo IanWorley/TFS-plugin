@@ -1,5 +1,6 @@
 package com.ianworley.tfvc.tf
 
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
 import com.intellij.openapi.diagnostic.Logger
@@ -24,7 +25,7 @@ object TfvcNotifications {
 
     fun logToConsole(project: Project, message: String) {
         logger.info(message)
-        ProjectLevelVcsManager.getInstance(project).addMessageToConsoleWindow("[TFVC] $message")
+        ProjectLevelVcsManager.getInstance(project).addMessageToConsoleWindow("[TFVC] $message", ConsoleViewContentType.NORMAL_OUTPUT)
     }
 
     private fun notify(project: Project, title: String, content: String, type: NotificationType) {

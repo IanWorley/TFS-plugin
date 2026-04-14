@@ -15,8 +15,6 @@ class TfvcEditFileProvider(
 ) : EditFileProvider {
     override fun getRequestText(): String = "TFVC checkout is required before editing these files."
 
-    override fun getEditFilesTitle(): String = "TFVC Checkout"
-
     override fun editFiles(files: Array<out VirtualFile>) {
         checkoutFiles(files.toList())
     }

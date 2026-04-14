@@ -16,7 +16,6 @@ class TfvcSettingsConfigurable(
         row("tf.exe path override") {
             textField()
                 .bindText(settings::tfExecutablePathOverride)
-                .columns(40)
                 .comment("Leave blank to resolve tf.exe from PATH.")
         }
 
@@ -28,7 +27,6 @@ class TfvcSettingsConfigurable(
         row("Command timeout (seconds)") {
             intTextField(5..600)
                 .bindIntText(settings::commandTimeoutSeconds)
-                .columns(6)
         }
 
         row {

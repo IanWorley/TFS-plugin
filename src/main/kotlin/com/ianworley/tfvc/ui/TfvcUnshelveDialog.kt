@@ -22,10 +22,10 @@ data class TfvcUnshelveRequest(
 )
 
 class TfvcUnshelveDialog(
-    project: Project,
+    private val currentProject: Project,
     initialOwner: String,
     private val loadShelvesets: (String) -> List<ShelvesetSummary>,
-) : DialogWrapper(project) {
+) : DialogWrapper(currentProject) {
     private val ownerField = JBTextField(initialOwner)
     private val removeAfterCheckBox = JBCheckBox("Remove shelveset after unshelve")
     private val listModel = CollectionListModel<ShelvesetSummary>()
@@ -79,7 +79,7 @@ class TfvcUnshelveDialog(
             },
             "Loading TFVC Shelvesets",
             true,
-            project,
+            currentProject,
         )
         listModel.replaceAll(loaded)
         if (loaded.isNotEmpty()) {

@@ -1,0 +1,5 @@
+Collection: http://tfs:8080/tfs/DefaultCollection
+Workspace: WorkspaceOne;ian
+Workspace type: Local
+Server folder: $/Sample
+Local folder: C:\src\sample

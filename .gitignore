@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IntelliJ project files
+.idea/
+*.iml
+
+# IntelliJ Platform plugin sandbox and caches
+.intellijPlatform/
+sandbox/
+temp:/
+
+# Kotlin / JVM compiler artifacts
+*.class
+*.log
+
+# OS-generated files
+.DS_Store
+Thumbs.db

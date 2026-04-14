@@ -43,8 +43,8 @@ intellijPlatform {
 
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "243"
-            untilBuild = "243.*"
+            sinceBuild = providers.gradleProperty("pluginSinceBuild").get()
+            untilBuild = providers.gradleProperty("pluginUntilBuild").get()
         }
 
         name = "TFVC for JetBrains"

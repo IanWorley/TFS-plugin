@@ -1,10 +1,11 @@
 package com.ianworley.tfvc.vcs
 
 import com.ianworley.tfvc.parsing.TfWorkfoldParser
+import com.ianworley.tfvc.settings.TfvcSettingsState
 import com.ianworley.tfvc.tf.TfvcPlatform
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vcs.VcsKey
 import com.intellij.openapi.vcs.VcsRootChecker
 import java.nio.charset.StandardCharsets
@@ -18,12 +19,16 @@ class TfvcVcsRootChecker : VcsRootChecker() {
             return false
         }
 
-        val commandLine = GeneralCommandLine("tf.exe")
+        val commandLine = GeneralCommandLine(resolveExecutable(path))
             .withParameters("workfold", path, "/noprompt")
             .withWorkDirectory(path)
             .withCharset(StandardCharsets.UTF_8)
 
-        val output = CapturingProcessHandler(commandLine).runProcess(30_000)
+        val output = try {
+            CapturingProcessHandler(commandLine).runProcess(30_000)
+        } catch (_: Exception) {
+            return false
+        }
         if (output.exitCode !in listOf(0, 1)) {
             return false
         }
@@ -33,4 +38,23 @@ class TfvcVcsRootChecker : VcsRootChecker() {
     }
 
     override fun isVcsDir(path: String): Boolean = false
+
+    private fun resolveExecutable(path: String): String {
+        val normalizedPath = runCatching { Path.of(path).toAbsolutePath().normalize() }.getOrNull()
+        val project = ProjectManager.getInstance().openProjects.firstOrNull { openProject ->
+            val projectPath = openProject.basePath
+                ?.takeIf(String::isNotBlank)
+                ?.let { runCatching { Path.of(it).toAbsolutePath().normalize() }.getOrNull() }
+                ?: return@firstOrNull false
+
+            normalizedPath != null &&
+                (normalizedPath.startsWith(projectPath) || projectPath.startsWith(normalizedPath))
+        }
+
+        return project
+            ?.let(TfvcSettingsState::getInstance)
+            ?.tfExecutablePathOverride
+            .orEmpty()
+            .ifBlank { "tf.exe" }
+    }
 }

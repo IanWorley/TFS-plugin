@@ -8,6 +8,13 @@ import java.nio.file.Path
 
 class TfvcCommandBuilderTest {
     @Test
+    fun `builds status arguments for server paths`() {
+        val args = TfvcCommandBuilder.status("$/Sample")
+
+        assertThat(args).containsExactly("status", "$/Sample", "/recursive", "/format:detailed")
+    }
+
+    @Test
     fun `builds add arguments with recursive for directories`() {
         val tempDir = Files.createTempDirectory("tfvc-add")
         val file = tempDir.resolve("file.txt")

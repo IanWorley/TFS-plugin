@@ -9,7 +9,7 @@ object TfvcCommandBuilder {
 
     fun workspaces(): List<String> = listOf("workspaces", "/format:xml")
 
-    fun status(scope: Path): List<String> = listOf("status", scope.toString(), "/recursive", "/format:detailed")
+    fun status(scope: String): List<String> = listOf("status", scope, "/recursive", "/format:detailed")
 
     fun checkout(paths: Collection<Path>): List<String> =
         listOf("checkout") + paths.map(Path::toString)

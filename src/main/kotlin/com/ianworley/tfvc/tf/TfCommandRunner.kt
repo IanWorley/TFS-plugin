@@ -37,9 +37,18 @@ class TfCommandRunner(
             commandLine.withWorkDirectory(workingDirectory.toFile())
         }
 
-        val handler = CapturingProcessHandler(commandLine)
         val timeoutMillis = timeoutSeconds * 1000
         val startedAt = System.nanoTime()
+        val handler = try {
+            CapturingProcessHandler(commandLine)
+        } catch (error: Exception) {
+            return TfCommandResult(
+                exitCode = 100,
+                stdout = "",
+                stderr = error.message ?: "Failed to start tf.exe.",
+                durationMs = (System.nanoTime() - startedAt) / 1_000_000,
+            )
+        }
         var capturedOutput = handler.runProcess(timeoutMillis)
         if (capturedOutput.isTimeout) {
             capturedOutput = capturedOutput.apply {

@@ -2,6 +2,8 @@ package com.ianworley.tfvc.tf
 
 import com.ianworley.tfvc.parsing.TfWorkfoldParser
 import com.ianworley.tfvc.parsing.TfWorkspacesXmlParser
+import com.ianworley.tfvc.settings.TfvcSettingsState
+import com.ianworley.tfvc.settings.WorkspaceModePreference
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import java.nio.file.Files
@@ -16,6 +18,19 @@ class TfvcWorkspaceService(
     fun findWorkspaceFor(path: Path): WorkspaceContext? {
         val probe = normalizeProbe(path)
         return cache.computeIfAbsent(probe) { discoverWorkspace(it) }
+    }
+
+    fun effectiveWorkspaceType(path: Path): WorkspaceType? =
+        findWorkspaceFor(path)?.let(::effectiveWorkspaceType)
+
+    fun effectiveWorkspaceType(workspace: WorkspaceContext): WorkspaceType {
+        val preference = TfvcSettingsState.getInstance(project).workspaceModePreference(workspace.localRoot)
+        return when (preference) {
+            WorkspaceModePreference.LOCAL -> WorkspaceType.LOCAL
+            WorkspaceModePreference.SERVER -> WorkspaceType.SERVER
+            WorkspaceModePreference.AUTO ->
+                if (workspace.workspaceType == WorkspaceType.UNKNOWN) WorkspaceType.LOCAL else workspace.workspaceType
+        }
     }
 
     fun isRoot(path: Path): Boolean {

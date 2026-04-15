@@ -2,12 +2,17 @@ package com.ianworley.tfvc.vcs
 
 import com.ianworley.tfvc.parsing.TfShelvesetsParser
 import com.ianworley.tfvc.settings.TfvcSettingsState
+import com.ianworley.tfvc.settings.WorkspaceModePreference
 import com.ianworley.tfvc.tf.TfCommandRunner
 import com.ianworley.tfvc.tf.TfvcCommandBuilder
 import com.ianworley.tfvc.tf.TfvcWorkspaceService
+import com.ianworley.tfvc.tf.WorkspaceType
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vcs.LocalFilePath
+import com.intellij.openapi.vcs.ProjectLevelVcsManager
+import com.intellij.openapi.vcs.VcsDirectoryMapping
 import com.intellij.openapi.vcs.changes.Change
+import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vcs.changes.CommitContext
 import com.intellij.openapi.vcs.changes.CurrentContentRevision
 import com.intellij.openapi.command.WriteCommandAction
@@ -22,11 +27,16 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 class TfvcIntegrationTest : BasePlatformTestCase() {
+    private data class RegisteredWorkspace(
+        val serverPath: String,
+        val workspaceType: WorkspaceType,
+    )
+
     private lateinit var fakeTfDir: Path
     private lateinit var responsesDir: Path
     private lateinit var logFile: Path
     private lateinit var workspaceRoot: Path
-    private val workspaceMappings = linkedMapOf<Path, String>()
+    private val workspaceMappings = linkedMapOf<Path, RegisteredWorkspace>()
 
     override fun getTestDataPath(): String = Paths.get("src/test/resources").toAbsolutePath().toString()
 
@@ -97,6 +107,66 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
             { logText().contains("checkout ${file.toNioPath()}") },
             5,
         )
+    }
+
+    fun `test startup auto maps detected tfvc project root`() {
+        val projectRoot = Path.of(project.basePath!!).normalize()
+        registerWorkspace(projectRoot, "${'$'}/ProjectRoot")
+        writeArgumentResponse("status", projectRoot, "stdout", "There are no pending changes.")
+        val vcsManager = ProjectLevelVcsManager.getInstance(project)
+
+        try {
+            TfvcStartupActivity().runActivity(project)
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "Timed out waiting for active TFVC project root mapping",
+                {
+                    vcsManager.allVcsRoots.any { root ->
+                        root.vcs?.name == TfvcVcs.NAME &&
+                            root.path.toNioPath().normalize() == projectRoot
+                    }
+                },
+                5,
+            )
+        } finally {
+            vcsManager.setDirectoryMappings(emptyList())
+        }
+    }
+
+    fun `test startup refresh loads existing pending changes into change list manager`() {
+        val projectRoot = Path.of(project.basePath!!).normalize()
+        registerWorkspace(projectRoot, "${'$'}/ProjectRoot")
+        val file = createWorkspaceFile(projectRoot, "pending.txt", "content")
+        val vcsManager = ProjectLevelVcsManager.getInstance(project)
+        vcsManager.setDirectoryMappings(
+            listOf(VcsDirectoryMapping(projectRoot.toString(), TfvcVcs.NAME)),
+        )
+        try {
+            writeArgumentResponse(
+                "status",
+                projectRoot,
+                "stdout",
+                """
+                Server item: ${'$'}/ProjectRoot/pending.txt
+                Local item: ${file.toNioPath()}
+                Change: edit
+                User: ian
+                Lock: none
+                """.trimIndent(),
+            )
+
+            TfvcStartupActivity().runActivity(project)
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "Timed out waiting for startup status refresh",
+                { ChangeListManager.getInstance(project).getChange(file) != null },
+                5,
+            )
+
+            assertThat(ChangeListManager.getInstance(project).getChange(file)?.fileStatus).isEqualTo(FileStatus.MODIFIED)
+        } finally {
+            vcsManager.setDirectoryMappings(emptyList())
+        }
     }
 
     fun `test add files runs tf add`() {
@@ -231,6 +301,76 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
         assertThatLogContains("checkout ${file.toNioPath()}")
     }
 
+    fun `test server workspace status refresh runs status against server path`() {
+        reconfigureWorkspace(workspaceRoot, "${'$'}/Sample", WorkspaceType.SERVER)
+        writeArgumentResponse("status", "${'$'}/Sample", "stdout", "There are no pending changes.")
+
+        val changes = TfvcStatusCache.getInstance(project).statusForRoot(workspaceRoot, forceRefresh = true)
+
+        assertThat(changes).isEmpty()
+        assertThatLogContains("status ${'$'}/Sample /recursive /format:detailed /noprompt")
+    }
+
+    fun `test server workspace status output maps back to local file paths`() {
+        reconfigureWorkspace(workspaceRoot, "${'$'}/Sample", WorkspaceType.SERVER)
+        val file = createWorkspaceFile("server-status.txt", "content")
+        writeArgumentResponse(
+            "status",
+            "${'$'}/Sample",
+            "stdout",
+            """
+            Server item: ${'$'}/Sample/server-status.txt
+            Change: edit
+            User: ian
+            Lock: none
+            """.trimIndent(),
+        )
+
+        val changes = TfvcStatusCache.getInstance(project).statusForRoot(workspaceRoot, forceRefresh = true)
+
+        assertThat(changes).hasSize(1)
+        assertThat(changes.single().localPath).isEqualTo(file.toNioPath().normalize())
+    }
+
+    fun `test auto mode falls back to local when workspace detection is unknown`() {
+        reconfigureWorkspace(workspaceRoot, "${'$'}/Sample", WorkspaceType.UNKNOWN)
+        writeArgumentResponse("status", workspaceRoot, "stdout", "There are no pending changes.")
+
+        val workspaceService = TfvcWorkspaceService.getInstance(project)
+        TfvcStatusCache.getInstance(project).statusForRoot(workspaceRoot, forceRefresh = true)
+
+        assertThat(workspaceService.effectiveWorkspaceType(workspaceRoot)).isEqualTo(WorkspaceType.LOCAL)
+        assertThatLogContains("status ${workspaceRoot.normalize()} /recursive /format:detailed /noprompt")
+    }
+
+    fun `test per root override can force one root to server mode while another remains auto local`() {
+        val secondRoot = createWorkspaceRoot("tfvc-workspace-two")
+        registerWorkspace(secondRoot, "${'$'}/SampleTwo", WorkspaceType.LOCAL)
+        TfvcSettingsState.getInstance(project).setWorkspaceModePreference(workspaceRoot, WorkspaceModePreference.SERVER)
+        writeArgumentResponse("status", "${'$'}/Sample", "stdout", "There are no pending changes.")
+        writeArgumentResponse("status", secondRoot, "stdout", "There are no pending changes.")
+
+        val statusCache = TfvcStatusCache.getInstance(project)
+        val workspaceService = TfvcWorkspaceService.getInstance(project)
+        statusCache.statusForRoot(workspaceRoot, forceRefresh = true)
+        statusCache.statusForRoot(secondRoot, forceRefresh = true)
+
+        assertThat(workspaceService.effectiveWorkspaceType(workspaceRoot)).isEqualTo(WorkspaceType.SERVER)
+        assertThat(workspaceService.effectiveWorkspaceType(secondRoot)).isEqualTo(WorkspaceType.LOCAL)
+        assertThatLogContains("status ${'$'}/Sample /recursive /format:detailed /noprompt")
+        assertThatLogContains("status ${secondRoot.normalize()} /recursive /format:detailed /noprompt")
+    }
+
+    fun `test manual checkout still uses local file paths for server workspaces`() {
+        reconfigureWorkspace(workspaceRoot, "${'$'}/Sample", WorkspaceType.SERVER)
+        val file = createWorkspaceFile("server-checkout.txt", "hello")
+        writeResponse("checkout.stdout", "")
+
+        TfvcEditFileProvider(project).checkoutFiles(listOf(file))
+
+        assertThatLogContains("checkout ${file.toNioPath()}")
+    }
+
     private fun createWorkspaceFile(name: String, text: String) =
         workspaceRoot.resolve(name).let { path ->
             Files.createDirectories(path.parent)
@@ -255,8 +395,12 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
             checkNotNull(LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path))
         }
 
-    private fun registerWorkspace(root: Path, serverPath: String) {
-        workspaceMappings[root.normalize()] = serverPath
+    private fun registerWorkspace(
+        root: Path,
+        serverPath: String,
+        workspaceType: WorkspaceType = WorkspaceType.LOCAL,
+    ) {
+        workspaceMappings[root.normalize()] = RegisteredWorkspace(serverPath, workspaceType)
         writeArgumentResponse(
             "workfold",
             root,
@@ -264,7 +408,7 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
             """
             Collection: http://tfs:8080/tfs/DefaultCollection
             Workspace: ${workspaceNameFor(root)};ian
-            Workspace type: Local
+            Workspace type: ${workspaceTypeLabel(workspaceType)}
             Server folder: $serverPath
             Local folder: ${root.toString()}
             """.trimIndent(),
@@ -273,11 +417,11 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
             "workspaces.stdout",
             """
             <Workspaces>
-            ${workspaceMappings.entries.joinToString("\n") { (localRoot, mappedServerPath) ->
+            ${workspaceMappings.entries.joinToString("\n") { (localRoot, registration) ->
                 """
-                  <Workspace name="${workspaceNameFor(localRoot)}" owner="ian" computer="DEVBOX" location="Local">
+                  <Workspace name="${workspaceNameFor(localRoot)}" owner="ian" computer="DEVBOX" location="${workspaceTypeLabel(registration.workspaceType)}">
                     <Collection>http://tfs:8080/tfs/DefaultCollection</Collection>
-                    <WorkingFolder localItem="$localRoot" serverItem="$mappedServerPath" />
+                    <WorkingFolder localItem="$localRoot" serverItem="${registration.serverPath}" />
                   </Workspace>
                 """.trimIndent()
             }}
@@ -291,6 +435,10 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
     }
 
     private fun writeArgumentResponse(command: String, argument: Path, stream: String, content: String) {
+        writeArgumentResponse(command, argument.toString(), stream, content)
+    }
+
+    private fun writeArgumentResponse(command: String, argument: String, stream: String, content: String) {
         writeResponse("$command.arg.${sanitizeResponseKey(argument.toString())}.$stream", content)
     }
 
@@ -314,6 +462,18 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
     private fun sanitizeResponseKey(value: String): String = value.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
     private fun workspaceNameFor(root: Path): String = "Workspace${sanitizeResponseKey(root.fileName.toString())}"
+
+    private fun workspaceTypeLabel(workspaceType: WorkspaceType): String = when (workspaceType) {
+        WorkspaceType.LOCAL -> "Local"
+        WorkspaceType.SERVER -> "Server"
+        WorkspaceType.UNKNOWN -> "Unknown"
+    }
+
+    private fun reconfigureWorkspace(root: Path, serverPath: String, workspaceType: WorkspaceType) {
+        registerWorkspace(root, serverPath, workspaceType)
+        TfvcWorkspaceService.getInstance(project).invalidate(root)
+        TfvcStatusCache.getInstance(project).invalidate(root)
+    }
 
     private fun fakeTfScript(): String =
         """

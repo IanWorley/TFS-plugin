@@ -265,9 +265,8 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
 
         val changes = TfvcStatusCache.getInstance(project).statusForRoot(workspaceRoot, forceRefresh = true)
 
-        assertThat(changes).singleElement().satisfies { pending ->
-            assertThat(pending.localPath).isEqualTo(file.toNioPath().normalize())
-        }
+        assertThat(changes).hasSize(1)
+        assertThat(changes.single().localPath).isEqualTo(file.toNioPath().normalize())
     }
 
     fun `test auto mode falls back to local when workspace detection is unknown`() {

@@ -58,7 +58,7 @@ intellijPlatform {
             TFVC support for JetBrains IDEs backed by tf.exe.
             <br/>
             <br/>
-            Version 1 provides TFVC root detection, pending change integration, add, checkout, shelve, and unshelve.
+            Version 1 provides TFVC root detection, pending change integration, standard check-in, add, checkout, shelve, and unshelve.
         """.trimIndent()
     }
 }

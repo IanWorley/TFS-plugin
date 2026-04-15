@@ -1,11 +1,14 @@
 package com.ianworley.tfvc.vcs
 
 import com.ianworley.tfvc.parsing.TfStatusParser
+import com.ianworley.tfvc.settings.TfvcSettingsState
 import com.ianworley.tfvc.tf.PendingChange
 import com.ianworley.tfvc.tf.TfCommandRunner
 import com.ianworley.tfvc.tf.TfvcCommandBuilder
 import com.ianworley.tfvc.tf.TfvcNotifications
+import com.ianworley.tfvc.tf.TfvcPathMapper
 import com.ianworley.tfvc.tf.TfvcWorkspaceService
+import com.ianworley.tfvc.tf.WorkspaceType
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager
@@ -34,9 +37,16 @@ class TfvcStatusCache(
             return cached.changes
         }
 
+        val workspaceService = TfvcWorkspaceService.getInstance(project)
+        val workspace = workspaceService.findWorkspaceFor(normalizedRoot) ?: return cached?.changes.orEmpty()
+        val effectiveWorkspaceType = workspaceService.effectiveWorkspaceType(workspace)
+        val statusScope = when (effectiveWorkspaceType) {
+            WorkspaceType.SERVER -> workspace.serverPath
+            WorkspaceType.LOCAL, WorkspaceType.UNKNOWN -> workspace.localRoot.toString()
+        }
         val result = TfCommandRunner.getInstance(project).run(
-            args = TfvcCommandBuilder.status(normalizedRoot),
-            workingDirectory = normalizedRoot,
+            args = TfvcCommandBuilder.status(statusScope),
+            workingDirectory = workspace.localRoot,
         )
         if (!result.isSuccessfulLike) {
             if (result.stderr.isNotBlank()) {
@@ -49,7 +59,18 @@ class TfvcStatusCache(
             return cached?.changes.orEmpty()
         }
 
-        val parsed = TfStatusParser.parse(result.stdout)
+        val parsed = TfStatusParser.parse(
+            output = result.stdout,
+            resolveServerItem = { serverItem -> TfvcPathMapper.toLocalPath(workspace, serverItem) },
+            onUnresolvedServerItem = { serverItem ->
+                if (TfvcSettingsState.getInstance(project).verboseCommandLogging) {
+                    TfvcNotifications.logToConsole(
+                        project,
+                        "Skipping TFVC status entry outside mapped root ${workspace.localRoot}: $serverItem",
+                    )
+                }
+            },
+        )
         cache[normalizedRoot] = CachedStatus(System.currentTimeMillis(), parsed)
         return parsed
     }

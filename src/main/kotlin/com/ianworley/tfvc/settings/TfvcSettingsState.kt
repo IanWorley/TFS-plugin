@@ -17,14 +17,19 @@ class TfvcSettingsState : PersistentStateComponent<TfvcSettingsState.State> {
         var autoCheckoutOnEdit: Boolean = true,
         var commandTimeoutSeconds: Int = 60,
         var verboseCommandLogging: Boolean = false,
+        var workspaceModeOverrides: MutableMap<String, String> = mutableMapOf(),
     )
 
     private var state = State()
 
-    override fun getState(): State = state.copy()
+    override fun getState(): State = state.copy(
+        workspaceModeOverrides = state.workspaceModeOverrides.toMutableMap(),
+    )
 
     override fun loadState(state: State) {
-        this.state = state.copy()
+        this.state = state.copy(
+            workspaceModeOverrides = state.workspaceModeOverrides.toMutableMap(),
+        )
     }
 
     var tfExecutablePathOverride: String
@@ -50,6 +55,21 @@ class TfvcSettingsState : PersistentStateComponent<TfvcSettingsState.State> {
         set(value) {
             state.verboseCommandLogging = value
         }
+
+    fun workspaceModePreference(root: java.nio.file.Path): WorkspaceModePreference =
+        WorkspaceModePreference.fromStorage(state.workspaceModeOverrides[normalizeRootKey(root)])
+
+    fun setWorkspaceModePreference(root: java.nio.file.Path, preference: WorkspaceModePreference) {
+        val normalizedKey = normalizeRootKey(root)
+        if (preference == WorkspaceModePreference.AUTO) {
+            state.workspaceModeOverrides.remove(normalizedKey)
+            return
+        }
+
+        state.workspaceModeOverrides[normalizedKey] = preference.name
+    }
+
+    private fun normalizeRootKey(root: java.nio.file.Path): String = root.toAbsolutePath().normalize().toString()
 
     companion object {
         fun getInstance(project: Project): TfvcSettingsState = project.service()

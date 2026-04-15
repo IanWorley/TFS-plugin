@@ -8,18 +8,27 @@ import java.nio.file.Paths
 object TfStatusParser {
     private val keyValuePattern = Regex("""^\s*([^:]+?)\s*:\s*(.*?)\s*$""")
 
-    fun parse(output: String): List<PendingChange> {
+    fun parse(
+        output: String,
+        resolveServerItem: (String) -> Path? = { null },
+        onUnresolvedServerItem: ((String) -> Unit)? = null,
+    ): List<PendingChange> {
         val normalized = output.trim()
         if (normalized.isEmpty() || normalized.contains("There are no pending changes", ignoreCase = true)) {
             return emptyList()
         }
 
         return normalized.split(Regex("""\r?\n\s*\r?\n"""))
-            .mapNotNull(::parseBlock)
+            .mapNotNull { parseBlock(it, resolveServerItem, onUnresolvedServerItem) }
     }
 
-    private fun parseBlock(block: String): PendingChange? {
+    private fun parseBlock(
+        block: String,
+        resolveServerItem: (String) -> Path?,
+        onUnresolvedServerItem: ((String) -> Unit)?,
+    ): PendingChange? {
         var localPath: Path? = null
+        var serverItem: String? = null
         var changeDescriptor = ""
         var user = ""
         var locked = false
@@ -34,6 +43,7 @@ object TfStatusParser {
                     val value = match.groupValues[2].trim()
                     when {
                         key.startsWith("local item") -> localPath = Paths.get(value).normalize()
+                        key.startsWith("server item") -> serverItem = value
                         key.startsWith("change") -> changeDescriptor = value
                         key.startsWith("user") -> user = value
                         key.startsWith("lock") -> locked = value.isNotBlank() && !value.equals("none", ignoreCase = true)
@@ -42,7 +52,12 @@ object TfStatusParser {
                 }
             }
 
-        val resolvedPath = localPath ?: return null
+        val resolvedPath = localPath ?: serverItem?.let(resolveServerItem)?.normalize()
+        if (resolvedPath == null) {
+            serverItem?.let { onUnresolvedServerItem?.invoke(it) }
+            return null
+        }
+
         val tokens = changeDescriptor.split(',', ';')
             .map(String::trim)
             .filter(String::isNotEmpty)

@@ -1,7 +1,5 @@
 package com.ianworley.tfvc.vcs
 
-import com.ianworley.tfvc.tf.TfCommandRunner
-import com.ianworley.tfvc.tf.TfvcCommandBuilder
 import com.ianworley.tfvc.tf.TfvcNotifications
 import com.ianworley.tfvc.tf.TfvcWorkspaceService
 import com.intellij.openapi.application.ApplicationManager
@@ -17,6 +15,8 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 class TfvcVfsListener(
     private val project: Project,
 ) : BulkFileListener {
+    private val pendingChangesSupport = TfvcPendingChangesSupport(project)
+
     override fun after(events: List<VFileEvent>) {
         val candidates = events.asSequence()
             .filterIsInstance<VFileCreateEvent>()
@@ -54,25 +54,12 @@ class TfvcVfsListener(
     }
 
     internal fun addFiles(files: Collection<VirtualFile>) {
-        val workspaceService = TfvcWorkspaceService.getInstance(project)
-        val byRoot = files.groupBy { workspaceService.findWorkspaceFor(it.toNioPath())?.localRoot }
-            .filterKeys { it != null }
-
-        byRoot.forEach { (root, scopedFiles) ->
-            val resolvedRoot = root ?: return@forEach
-            val result = TfCommandRunner.getInstance(project).run(
-                args = TfvcCommandBuilder.add(scopedFiles.map(VirtualFile::toNioPath)),
-                workingDirectory = resolvedRoot,
+        pendingChangesSupport.add(files).forEach { exception ->
+            TfvcNotifications.error(
+                project,
+                "TFVC add failed",
+                "Fix tf.exe access or workspace state externally, then retry.\n${exception.message}",
             )
-            if (!result.isSuccessfulLike) {
-                TfvcNotifications.error(
-                    project,
-                    "TFVC add failed",
-                    "Fix tf.exe access or workspace state externally, then retry.\n${result.stderr.ifBlank { "tf add failed." }}",
-                )
-            } else {
-                TfvcStatusCache.getInstance(project).requestRefresh(resolvedRoot)
-            }
         }
     }
 }

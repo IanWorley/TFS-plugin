@@ -1,5 +1,6 @@
 package com.ianworley.tfvc.tf
 
+import com.intellij.openapi.vcs.FilePath
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -24,6 +25,27 @@ object TfvcCommandBuilder {
             }
         }
     }
+
+    fun checkin(items: Collection<FilePath>, comment: String?): List<String> =
+        buildList {
+            add("checkin")
+            addAll(items.map(FilePath::getPath))
+            if (!comment.isNullOrBlank()) {
+                add("/comment:${comment.trim()}")
+            }
+            if (items.any(FilePath::isDirectory)) {
+                add("/recursive")
+            }
+        }
+
+    fun delete(items: Collection<FilePath>): List<String> =
+        buildList {
+            add("delete")
+            addAll(items.map(FilePath::getPath))
+            if (items.any(FilePath::isDirectory)) {
+                add("/recursive")
+            }
+        }
 
     fun shelve(
         name: String,

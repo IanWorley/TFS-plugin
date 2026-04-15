@@ -1,5 +1,6 @@
 package com.ianworley.tfvc.tf
 
+import com.intellij.openapi.vcs.LocalFilePath
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import java.nio.file.Files
@@ -21,6 +22,63 @@ class TfvcCommandBuilderTest {
         val args = TfvcCommandBuilder.checkout(listOf(Path.of("repo/file.txt")))
 
         assertThat(args).containsExactly("checkout", "repo/file.txt")
+    }
+
+    @Test
+    fun `builds checkin arguments with comment`() {
+        val args = TfvcCommandBuilder.checkin(
+            listOf(LocalFilePath("repo/file.txt", false)),
+            "  Hello world  ",
+        )
+
+        assertThat(args).containsExactly("checkin", "repo/file.txt", "/comment:Hello world")
+    }
+
+    @Test
+    fun `builds checkin arguments without comment`() {
+        val args = TfvcCommandBuilder.checkin(
+            listOf(LocalFilePath("repo/file.txt", false)),
+            "   ",
+        )
+
+        assertThat(args).containsExactly("checkin", "repo/file.txt")
+    }
+
+    @Test
+    fun `builds checkin arguments with recursive for directories`() {
+        val args = TfvcCommandBuilder.checkin(
+            listOf(
+                LocalFilePath("repo/folder", true),
+                LocalFilePath("repo/folder/file.txt", false),
+            ),
+            null,
+        )
+
+        assertThat(args).containsExactly("checkin", "repo/folder", "repo/folder/file.txt", "/recursive")
+    }
+
+    @Test
+    fun `builds delete arguments with file paths`() {
+        val args = TfvcCommandBuilder.delete(
+            listOf(
+                LocalFilePath("repo/one.txt", false),
+                LocalFilePath("repo/two.txt", false),
+            ),
+        )
+
+        assertThat(args).containsExactly("delete", "repo/one.txt", "repo/two.txt")
+    }
+
+    @Test
+    fun `builds delete arguments with recursive for directories`() {
+        val args = TfvcCommandBuilder.delete(
+            listOf(
+                LocalFilePath("repo/folder", true),
+                LocalFilePath("repo/folder/file.txt", false),
+            ),
+        )
+
+        assertThat(args).containsExactly("delete", "repo/folder", "repo/folder/file.txt", "/recursive")
     }
 
     @Test

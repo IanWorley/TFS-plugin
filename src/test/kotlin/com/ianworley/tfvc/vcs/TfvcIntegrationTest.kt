@@ -9,7 +9,10 @@ import com.ianworley.tfvc.tf.TfvcWorkspaceService
 import com.ianworley.tfvc.tf.WorkspaceType
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vcs.LocalFilePath
+import com.intellij.openapi.vcs.ProjectLevelVcsManager
+import com.intellij.openapi.vcs.VcsDirectoryMapping
 import com.intellij.openapi.vcs.changes.Change
+import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vcs.changes.CommitContext
 import com.intellij.openapi.vcs.changes.CurrentContentRevision
 import com.intellij.openapi.command.WriteCommandAction
@@ -104,6 +107,66 @@ class TfvcIntegrationTest : BasePlatformTestCase() {
             { logText().contains("checkout ${file.toNioPath()}") },
             5,
         )
+    }
+
+    fun `test startup auto maps detected tfvc project root`() {
+        val projectRoot = Path.of(project.basePath!!).normalize()
+        registerWorkspace(projectRoot, "${'$'}/ProjectRoot")
+        writeArgumentResponse("status", projectRoot, "stdout", "There are no pending changes.")
+        val vcsManager = ProjectLevelVcsManager.getInstance(project)
+
+        try {
+            TfvcStartupActivity().runActivity(project)
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "Timed out waiting for active TFVC project root mapping",
+                {
+                    vcsManager.allVcsRoots.any { root ->
+                        root.vcs?.name == TfvcVcs.NAME &&
+                            root.path.toNioPath().normalize() == projectRoot
+                    }
+                },
+                5,
+            )
+        } finally {
+            vcsManager.setDirectoryMappings(emptyList())
+        }
+    }
+
+    fun `test startup refresh loads existing pending changes into change list manager`() {
+        val projectRoot = Path.of(project.basePath!!).normalize()
+        registerWorkspace(projectRoot, "${'$'}/ProjectRoot")
+        val file = createWorkspaceFile(projectRoot, "pending.txt", "content")
+        val vcsManager = ProjectLevelVcsManager.getInstance(project)
+        vcsManager.setDirectoryMappings(
+            listOf(VcsDirectoryMapping(projectRoot.toString(), TfvcVcs.NAME)),
+        )
+        try {
+            writeArgumentResponse(
+                "status",
+                projectRoot,
+                "stdout",
+                """
+                Server item: ${'$'}/ProjectRoot/pending.txt
+                Local item: ${file.toNioPath()}
+                Change: edit
+                User: ian
+                Lock: none
+                """.trimIndent(),
+            )
+
+            TfvcStartupActivity().runActivity(project)
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "Timed out waiting for startup status refresh",
+                { ChangeListManager.getInstance(project).getChange(file) != null },
+                5,
+            )
+
+            assertThat(ChangeListManager.getInstance(project).getChange(file)?.fileStatus).isEqualTo(FileStatus.MODIFIED)
+        } finally {
+            vcsManager.setDirectoryMappings(emptyList())
+        }
     }
 
     fun `test add files runs tf add`() {

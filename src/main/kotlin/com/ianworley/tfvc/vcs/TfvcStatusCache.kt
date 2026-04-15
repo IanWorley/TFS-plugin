@@ -11,6 +11,7 @@ import com.ianworley.tfvc.tf.TfvcWorkspaceService
 import com.ianworley.tfvc.tf.WorkspaceType
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vcs.changes.ChangeListManager
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.ui.update.MergingUpdateQueue
@@ -101,6 +102,7 @@ class TfvcStatusCache(
                 override fun run() {
                     val virtualFile = LocalFileSystem.getInstance().findFileByNioFile(root.normalize()) ?: return
                     VcsDirtyScopeManager.getInstance(project).dirDirtyRecursively(virtualFile)
+                    ChangeListManager.getInstance(project).scheduleUpdate()
                 }
             },
         )
